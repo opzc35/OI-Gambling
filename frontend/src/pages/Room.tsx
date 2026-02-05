@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { roomApi, gameApi } from '../services/api';
 import { wsService } from '../services/websocket';
-import type { Room, RoomMember, Round, GameMode } from '../types';
+import type { Room as RoomType, RoomMember, Round, GameMode } from '../types';
 import './Room.css';
 
 const Room: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const roomId = parseInt(id || '0');
 
-  const [room, setRoom] = useState<Room | null>(null);
+  const [room, setRoom] = useState<RoomType | null>(null);
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
   const [showStartModal, setShowStartModal] = useState(false);
@@ -32,6 +32,25 @@ const Room: React.FC = () => {
   const navigate = useNavigate();
 
   const isOwner = room?.owner_id === user?.id;
+
+  const loadRoomData = useCallback(async () => {
+    try {
+      const data = await roomApi.getRoom(roomId);
+      setRoom(data.room);
+      setMembers(data.members);
+    } catch (err) {
+      console.error('Failed to load room:', err);
+    }
+  }, [roomId]);
+
+  const loadCurrentRound = useCallback(async () => {
+    try {
+      const { round } = await gameApi.getCurrentRound(roomId);
+      setCurrentRound(round);
+    } catch (err) {
+      console.error('Failed to load current round:', err);
+    }
+  }, [roomId]);
 
   useEffect(() => {
     loadRoomData();
@@ -62,26 +81,7 @@ const Room: React.FC = () => {
       wsService.off('round_started', handleRoundStarted);
       wsService.off('round_settled', handleRoundSettled);
     };
-  }, [roomId]);
-
-  const loadRoomData = async () => {
-    try {
-      const data = await roomApi.getRoom(roomId);
-      setRoom(data.room);
-      setMembers(data.members);
-    } catch (err) {
-      console.error('Failed to load room:', err);
-    }
-  };
-
-  const loadCurrentRound = async () => {
-    try {
-      const { round } = await gameApi.getCurrentRound(roomId);
-      setCurrentRound(round);
-    } catch (err) {
-      console.error('Failed to load current round:', err);
-    }
-  };
+  }, [roomId, loadRoomData, loadCurrentRound]);
 
   const handleStartRound = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,7 +131,7 @@ const Room: React.FC = () => {
     if (!window.confirm('确定要结算本轮游戏吗？')) return;
 
     try {
-      const result = await gameApi.settleRound(currentRound!.id);
+      await gameApi.settleRound(currentRound!.id);
       alert('结算完成！');
       loadCurrentRound();
       loadRoomData();
