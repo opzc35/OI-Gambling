@@ -118,6 +118,18 @@
   font-size: 16px;
 }
 
+.problem-link {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+
+.problem-link:hover {
+  color: #5568d3;
+  text-decoration: underline;
+}
+
 .game-actions {
   display: flex;
   gap: 15px;

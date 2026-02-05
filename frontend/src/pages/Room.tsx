@@ -213,6 +213,22 @@ const Room: React.FC = () => {
               <h2>当前游戏</h2>
               <div className="round-info">
                 <p><strong>题目:</strong> {currentRound.problem_name || currentRound.problemName}</p>
+                {(currentRound.problem_id || currentRound.problemId) && (
+                  <p><strong>题号:</strong> {currentRound.problem_id || currentRound.problemId}</p>
+                )}
+                {currentRound.problemUrl && (
+                  <p>
+                    <strong>题目链接:</strong>{' '}
+                    <a
+                      href={currentRound.problemUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="problem-link"
+                    >
+                      查看题面 →
+                    </a>
+                  </p>
+                )}
                 <p><strong>模式:</strong> {
                   roundGameMode === 'tags' ? '标签猜测' :
                   roundGameMode === 'rating' ? '难度猜测' : '通过率猜测'

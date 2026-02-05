@@ -38,7 +38,9 @@ export interface Round {
   status: 'ongoing' | 'settled';
   started_at: string;
   settled_at?: string;
+  problemId?: string;
   problemName?: string;
+  problemUrl?: string;
   gameMode?: GameMode;
   penaltyCoefficient?: number;
   startedAt?: string;
