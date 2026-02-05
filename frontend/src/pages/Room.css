@@ -254,6 +254,50 @@
   cursor: pointer;
 }
 
+.tags-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.tag-option {
+  padding: 10px 15px;
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.tag-option:hover {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.tag-option.selected {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+  font-weight: 600;
+}
+
+.selected-tags-summary {
+  margin-top: 15px;
+  padding: 12px;
+  background: #e8f0fe;
+  border-left: 4px solid #667eea;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #333;
+}
+
 .selected-tags {
   display: flex;
   flex-wrap: wrap;

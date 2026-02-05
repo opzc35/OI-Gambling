@@ -28,7 +28,19 @@ const Room: React.FC = () => {
   const [ratingMax, setRatingMax] = useState(1000);
   const [passRateMin, setPassRateMin] = useState(30);
   const [passRateMax, setPassRateMax] = useState(40);
-  const [tagInput, setTagInput] = useState('');
+
+  // Codeforces 常见标签列表
+  const availableTags = [
+    'implementation', 'math', 'greedy', 'dp', 'data structures',
+    'brute force', 'constructive algorithms', 'graphs', 'sortings',
+    'binary search', 'dfs and similar', 'trees', 'strings', 'number theory',
+    'combinatorics', 'geometry', 'bitmasks', 'two pointers', 'dsu',
+    'shortest paths', 'probabilities', 'divide and conquer', 'hashing',
+    'games', 'flows', 'interactive', 'string suffix structures',
+    'expression parsing', 'matrices', 'fft', 'graph matchings',
+    'ternary search', 'meet-in-the-middle', '2-sat', 'chinese remainder theorem',
+    'schedules'
+  ];
 
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -110,6 +122,11 @@ const Room: React.FC = () => {
       const guess: any = {};
 
       if (currentRound?.game_mode === 'tags' || currentRound?.gameMode === 'tags') {
+        if (selectedTags.length === 0) {
+          setError('请至少选择一个标签');
+          setLoading(false);
+          return;
+        }
         guess.tags = selectedTags;
       } else if (currentRound?.game_mode === 'rating' || currentRound?.gameMode === 'rating') {
         guess.ratingMin = ratingMin;
@@ -121,12 +138,19 @@ const Room: React.FC = () => {
 
       await gameApi.submitGuess(currentRound!.id, guess);
       setShowGuessModal(false);
+      setSelectedTags([]);
       alert('猜测提交成功！');
     } catch (err: any) {
       setError(err.response?.data?.error || '提交猜测失败');
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
   };
 
   const handleSettleRound = async () => {
@@ -161,17 +185,6 @@ const Room: React.FC = () => {
     } catch (err: any) {
       alert(err.response?.data?.error || '关闭房间失败');
     }
-  };
-
-  const addTag = () => {
-    if (tagInput.trim() && !selectedTags.includes(tagInput.trim())) {
-      setSelectedTags([...selectedTags, tagInput.trim()]);
-      setTagInput('');
-    }
-  };
-
-  const removeTag = (tag: string) => {
-    setSelectedTags(selectedTags.filter(t => t !== tag));
   };
 
   if (!room) {
@@ -308,25 +321,24 @@ const Room: React.FC = () => {
             <form onSubmit={handleSubmitGuess}>
               {(roundGameMode === 'tags') && (
                 <div className="form-group">
-                  <label>标签 (多选)</label>
-                  <div className="tags-input">
-                    <input
-                      type="text"
-                      value={tagInput}
-                      onChange={(e) => setTagInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                      placeholder="输入标签后按回车"
-                    />
-                    <button type="button" onClick={addTag}>添加</button>
-                  </div>
-                  <div className="selected-tags">
-                    {selectedTags.map(tag => (
-                      <span key={tag} className="tag">
+                  <label>选择标签 (多选)</label>
+                  <div className="tags-grid">
+                    {availableTags.map(tag => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className={`tag-option ${selectedTags.includes(tag) ? 'selected' : ''}`}
+                        onClick={() => toggleTag(tag)}
+                      >
                         {tag}
-                        <button type="button" onClick={() => removeTag(tag)}>×</button>
-                      </span>
+                      </button>
                     ))}
                   </div>
+                  {selectedTags.length > 0 && (
+                    <div className="selected-tags-summary">
+                      已选择 {selectedTags.length} 个标签: {selectedTags.join(', ')}
+                    </div>
+                  )}
                 </div>
               )}
 
