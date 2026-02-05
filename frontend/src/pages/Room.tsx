@@ -15,6 +15,8 @@ const Room: React.FC = () => {
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
   const [showStartModal, setShowStartModal] = useState(false);
   const [showGuessModal, setShowGuessModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [settleResult, setSettleResult] = useState<any>(null);
   const [gameMode, setGameMode] = useState<GameMode>('tags');
   const [penaltyCoefficient, setPenaltyCoefficient] = useState(10);
   const [loading, setLoading] = useState(false);
@@ -131,8 +133,9 @@ const Room: React.FC = () => {
     if (!window.confirm('确定要结算本轮游戏吗？')) return;
 
     try {
-      await gameApi.settleRound(currentRound!.id);
-      alert('结算完成！');
+      const result = await gameApi.settleRound(currentRound!.id);
+      setSettleResult(result.results);
+      setShowResultModal(true);
       loadCurrentRound();
       loadRoomData();
     } catch (err: any) {
@@ -390,6 +393,50 @@ const Room: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showResultModal && settleResult && (
+        <div className="modal-overlay" onClick={() => setShowResultModal(false)}>
+          <div className="modal-content result-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>🎉 结算结果</h2>
+
+            <div className="result-section">
+              <h3>题目信息</h3>
+              <p><strong>题号:</strong> {settleResult.problemId}</p>
+              <p><strong>题目:</strong> {settleResult.problemName}</p>
+              {settleResult.actualTags && (
+                <p><strong>标签:</strong> {settleResult.actualTags.join(', ')}</p>
+              )}
+              {settleResult.actualRating && (
+                <p><strong>难度:</strong> {settleResult.actualRating}</p>
+              )}
+              {settleResult.actualPassRate && (
+                <p><strong>通过率:</strong> {settleResult.actualPassRate}%</p>
+              )}
+            </div>
+
+            <div className="result-section">
+              <h3>玩家结果</h3>
+              <div className="results-table">
+                {settleResult.guesses && settleResult.guesses.map((guess: any) => (
+                  <div key={guess.id} className={`result-row ${guess.is_correct ? 'correct' : 'incorrect'}`}>
+                    <span className="player-name">{guess.username}</span>
+                    <span className={`result-badge ${guess.is_correct ? 'win' : 'lose'}`}>
+                      {guess.is_correct ? '✓ 猜对' : '✗ 猜错'}
+                    </span>
+                    <span className={`points-change ${guess.points_change >= 0 ? 'positive' : 'negative'}`}>
+                      {guess.points_change >= 0 ? '+' : ''}{guess.points_change?.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button onClick={() => setShowResultModal(false)}>关闭</button>
+            </div>
           </div>
         </div>
       )}

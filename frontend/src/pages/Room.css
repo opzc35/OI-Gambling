@@ -340,3 +340,100 @@
   background: #ccc;
   cursor: not-allowed;
 }
+
+.result-modal {
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.result-modal h2 {
+  text-align: center;
+  color: #667eea;
+  margin-bottom: 30px;
+}
+
+.result-section {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.result-section h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 18px;
+  border-bottom: 2px solid #667eea;
+  padding-bottom: 10px;
+}
+
+.result-section p {
+  margin: 8px 0;
+  color: #555;
+}
+
+.results-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: white;
+  border-radius: 8px;
+  border-left: 4px solid #ddd;
+}
+
+.result-row.correct {
+  border-left-color: #27ae60;
+  background: #f0fff4;
+}
+
+.result-row.incorrect {
+  border-left-color: #e74c3c;
+  background: #fff5f5;
+}
+
+.player-name {
+  font-weight: 600;
+  color: #333;
+  flex: 1;
+}
+
+.result-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 10px;
+}
+
+.result-badge.win {
+  background: #d4edda;
+  color: #155724;
+}
+
+.result-badge.lose {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.points-change {
+  font-size: 18px;
+  font-weight: 700;
+  min-width: 80px;
+  text-align: right;
+}
+
+.points-change.positive {
+  color: #27ae60;
+}
+
+.points-change.negative {
+  color: #e74c3c;
+}
