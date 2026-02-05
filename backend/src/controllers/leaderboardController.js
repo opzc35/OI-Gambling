@@ -1,4 +1,5 @@
-const pool = require('../config/database');
+const db = require('../config/database');
+const pool = require('../config/dbHelper');
 
 const getLeaderboard = async (req, res) => {
   try {
@@ -17,8 +18,6 @@ const getLeaderboard = async (req, res) => {
 };
 
 const createTransaction = async (req, res) => {
-  const client = await pool.connect();
-
   try {
     const { toUserId, amount } = req.body;
 
@@ -34,62 +33,55 @@ const createTransaction = async (req, res) => {
       return res.status(400).json({ error: 'Cannot transfer to yourself' });
     }
 
-    await client.query('BEGIN');
-
-    const fromUserResult = await client.query(
-      'SELECT points FROM users WHERE id = $1',
+    const fromUserResult = await pool.query(
+      'SELECT points FROM users WHERE id = ?',
       [req.userId]
     );
 
     if (fromUserResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'User not found' });
     }
 
     const fromUserPoints = parseFloat(fromUserResult.rows[0].points);
 
     if (fromUserPoints < amount) {
-      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Insufficient points' });
     }
 
-    const toUserResult = await client.query(
-      'SELECT id FROM users WHERE id = $1',
+    const toUserResult = await pool.query(
+      'SELECT id FROM users WHERE id = ?',
       [toUserId]
     );
 
     if (toUserResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Recipient user not found' });
     }
 
-    await client.query(
-      'UPDATE users SET points = points - $1 WHERE id = $2',
-      [amount, req.userId]
-    );
+    // Use transaction
+    const transfer = db.transaction(() => {
+      db.prepare('UPDATE users SET points = points - ? WHERE id = ?')
+        .run(amount, req.userId);
 
-    await client.query(
-      'UPDATE users SET points = points + $1 WHERE id = $2',
-      [amount, toUserId]
-    );
+      db.prepare('UPDATE users SET points = points + ? WHERE id = ?')
+        .run(amount, toUserId);
 
-    const transactionResult = await client.query(
-      'INSERT INTO transactions (from_user_id, to_user_id, amount) VALUES ($1, $2, $3) RETURNING *',
-      [req.userId, toUserId, amount]
-    );
+      const info = db.prepare('INSERT INTO transactions (from_user_id, to_user_id, amount) VALUES (?, ?, ?)')
+        .run(req.userId, toUserId, amount);
 
-    await client.query('COMMIT');
+      return info.lastInsertRowid;
+    });
+
+    const transactionId = transfer();
+
+    const transaction = await pool.get('SELECT * FROM transactions WHERE id = ?', [transactionId]);
 
     res.status(201).json({
       message: 'Transaction completed successfully',
-      transaction: transactionResult.rows[0],
+      transaction,
     });
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('Create transaction error:', error);
     res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    client.release();
   }
 };
 
@@ -102,10 +94,10 @@ const getTransactionHistory = async (req, res) => {
        FROM transactions t
        JOIN users u1 ON t.from_user_id = u1.id
        JOIN users u2 ON t.to_user_id = u2.id
-       WHERE t.from_user_id = $1 OR t.to_user_id = $1
+       WHERE t.from_user_id = ? OR t.to_user_id = ?
        ORDER BY t.created_at DESC
        LIMIT 50`,
-      [req.userId]
+      [req.userId, req.userId]
     );
 
     res.json({ transactions: result.rows });

@@ -1,17 +1,13 @@
-const { Pool } = require('pg');
+const Database = require('better-sqlite3');
+const path = require('path');
 require('dotenv').config();
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../database.sqlite');
+const db = new Database(dbPath);
 
-pool.on('connect', () => {
-  console.log('Connected to PostgreSQL database');
-});
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
-});
+console.log('Connected to SQLite database');
 
-module.exports = pool;
+module.exports = db;

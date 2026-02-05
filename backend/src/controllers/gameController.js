@@ -1,4 +1,5 @@
-const pool = require('../config/database');
+const db = require('../config/database');
+const pool = require('../config/dbHelper');
 const { getRandomProblem, calculatePassRate } = require('../services/codeforcesService');
 
 const startRound = async (req, res) => {
@@ -15,7 +16,7 @@ const startRound = async (req, res) => {
     }
 
     const roomResult = await pool.query(
-      'SELECT owner_id FROM rooms WHERE id = $1 AND is_active = true',
+      'SELECT owner_id FROM rooms WHERE id = ? AND is_active = 1',
       [id]
     );
 
@@ -28,7 +29,7 @@ const startRound = async (req, res) => {
     }
 
     const ongoingRound = await pool.query(
-      'SELECT id FROM game_rounds WHERE room_id = $1 AND status = $2',
+      'SELECT id FROM game_rounds WHERE room_id = ? AND status = ?',
       [id, 'ongoing']
     );
 
@@ -39,17 +40,16 @@ const startRound = async (req, res) => {
     const problem = await getRandomProblem();
     const passRate = calculatePassRate(problem.solvedCount, problem.rating);
 
-    const result = await pool.query(
+    const result = await pool.run(
       `INSERT INTO game_rounds
        (room_id, problem_id, problem_name, problem_tags, problem_rating,
         problem_solved_count, actual_pass_rate, game_mode, penalty_coefficient)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         problem.id,
         problem.name,
-        problem.tags,
+        JSON.stringify(problem.tags),
         problem.rating,
         problem.solvedCount,
         passRate,
@@ -58,13 +58,15 @@ const startRound = async (req, res) => {
       ]
     );
 
+    const round = await pool.get('SELECT * FROM game_rounds WHERE id = ?', [result.lastID]);
+
     res.status(201).json({
       round: {
-        id: result.rows[0].id,
-        problemName: result.rows[0].problem_name,
-        gameMode: result.rows[0].game_mode,
-        penaltyCoefficient: result.rows[0].penalty_coefficient,
-        startedAt: result.rows[0].started_at,
+        id: round.id,
+        problemName: round.problem_name,
+        gameMode: round.game_mode,
+        penaltyCoefficient: round.penalty_coefficient,
+        startedAt: round.started_at,
       },
     });
   } catch (error) {
@@ -80,7 +82,7 @@ const getCurrentRound = async (req, res) => {
     const result = await pool.query(
       `SELECT id, problem_name, game_mode, penalty_coefficient, status, started_at
        FROM game_rounds
-       WHERE room_id = $1 AND status = $2
+       WHERE room_id = ? AND status = ?
        ORDER BY started_at DESC
        LIMIT 1`,
       [id, 'ongoing']
@@ -103,7 +105,7 @@ const submitGuess = async (req, res) => {
     const { tags, ratingMin, ratingMax, passRateMin, passRateMax } = req.body;
 
     const roundResult = await pool.query(
-      'SELECT * FROM game_rounds WHERE id = $1 AND status = $2',
+      'SELECT * FROM game_rounds WHERE id = ? AND status = ?',
       [id, 'ongoing']
     );
 
@@ -114,7 +116,7 @@ const submitGuess = async (req, res) => {
     const round = roundResult.rows[0];
 
     const memberCheck = await pool.query(
-      'SELECT * FROM room_members WHERE room_id = $1 AND user_id = $2',
+      'SELECT * FROM room_members WHERE room_id = ? AND user_id = ?',
       [round.room_id, req.userId]
     );
 
@@ -123,7 +125,7 @@ const submitGuess = async (req, res) => {
     }
 
     const existingGuess = await pool.query(
-      'SELECT id FROM guesses WHERE round_id = $1 AND user_id = $2',
+      'SELECT id FROM guesses WHERE round_id = ? AND user_id = ?',
       [id, req.userId]
     );
 
@@ -141,7 +143,7 @@ const submitGuess = async (req, res) => {
       if (!tags || !Array.isArray(tags) || tags.length === 0) {
         return res.status(400).json({ error: 'Tags array is required for tags mode' });
       }
-      guessTags = tags;
+      guessTags = JSON.stringify(tags);
     } else if (round.game_mode === 'rating') {
       if (ratingMin === undefined || ratingMax === undefined) {
         return res.status(400).json({ error: 'Rating range is required for rating mode' });
@@ -168,16 +170,18 @@ const submitGuess = async (req, res) => {
       guessPassRateMax = passRateMax;
     }
 
-    const result = await pool.query(
+    const result = await pool.run(
       `INSERT INTO guesses
        (round_id, user_id, guess_tags, guess_rating_min, guess_rating_max,
         guess_pass_rate_min, guess_pass_rate_max)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [id, req.userId, guessTags, guessRatingMin, guessRatingMax, guessPassRateMin, guessPassRateMax]
     );
 
-    res.status(201).json({ guess: result.rows[0] });
+    const guess = await pool.get('SELECT * FROM guesses WHERE id = ?', [result.lastID]);
+    if (guess.guess_tags) guess.guess_tags = JSON.parse(guess.guess_tags);
+
+    res.status(201).json({ guess });
   } catch (error) {
     console.error('Submit guess error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -185,41 +189,39 @@ const submitGuess = async (req, res) => {
 };
 
 const settleRound = async (req, res) => {
-  const client = await pool.connect();
-
   try {
     const { id } = req.params;
 
-    await client.query('BEGIN');
-
-    const roundResult = await client.query(
-      'SELECT * FROM game_rounds WHERE id = $1 AND status = $2',
+    const roundResult = await pool.query(
+      'SELECT * FROM game_rounds WHERE id = ? AND status = ?',
       [id, 'ongoing']
     );
 
     if (roundResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Round not found or already settled' });
     }
 
     const round = roundResult.rows[0];
+    round.problem_tags = JSON.parse(round.problem_tags || '[]');
 
-    const roomResult = await client.query(
-      'SELECT owner_id FROM rooms WHERE id = $1',
+    const roomResult = await pool.query(
+      'SELECT owner_id FROM rooms WHERE id = ?',
       [round.room_id]
     );
 
     if (roomResult.rows[0].owner_id !== req.userId) {
-      await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Only room owner can settle the round' });
     }
 
-    const guessesResult = await client.query(
-      'SELECT * FROM guesses WHERE round_id = $1',
+    const guessesResult = await pool.query(
+      'SELECT * FROM guesses WHERE round_id = ?',
       [id]
     );
 
-    const guesses = guessesResult.rows;
+    const guesses = guessesResult.rows.map(g => ({
+      ...g,
+      guess_tags: g.guess_tags ? JSON.parse(g.guess_tags) : null
+    }));
 
     guesses.forEach(guess => {
       let isCorrect = false;
@@ -245,51 +247,42 @@ const settleRound = async (req, res) => {
 
     const totalPenalty = incorrectGuesses.length * parseFloat(round.penalty_coefficient);
 
-    if (correctGuesses.length > 0) {
-      const rewardPerPerson = totalPenalty / correctGuesses.length;
+    // Use transaction
+    const settle = db.transaction(() => {
+      if (correctGuesses.length > 0) {
+        const rewardPerPerson = totalPenalty / correctGuesses.length;
 
-      for (const guess of incorrectGuesses) {
-        await client.query(
-          'UPDATE guesses SET is_correct = false, points_change = $1 WHERE id = $2',
-          [-parseFloat(round.penalty_coefficient), guess.id]
-        );
-        await client.query(
-          'UPDATE users SET points = points - $1 WHERE id = $2',
-          [parseFloat(round.penalty_coefficient), guess.user_id]
-        );
+        for (const guess of incorrectGuesses) {
+          db.prepare('UPDATE guesses SET is_correct = 0, points_change = ? WHERE id = ?')
+            .run(-parseFloat(round.penalty_coefficient), guess.id);
+          db.prepare('UPDATE users SET points = points - ? WHERE id = ?')
+            .run(parseFloat(round.penalty_coefficient), guess.user_id);
+        }
+
+        for (const guess of correctGuesses) {
+          db.prepare('UPDATE guesses SET is_correct = 1, points_change = ? WHERE id = ?')
+            .run(rewardPerPerson, guess.id);
+          db.prepare('UPDATE users SET points = points + ? WHERE id = ?')
+            .run(rewardPerPerson, guess.user_id);
+        }
+      } else {
+        for (const guess of guesses) {
+          db.prepare('UPDATE guesses SET is_correct = 0, points_change = 0 WHERE id = ?')
+            .run(guess.id);
+        }
       }
 
-      for (const guess of correctGuesses) {
-        await client.query(
-          'UPDATE guesses SET is_correct = true, points_change = $1 WHERE id = $2',
-          [rewardPerPerson, guess.id]
-        );
-        await client.query(
-          'UPDATE users SET points = points + $1 WHERE id = $2',
-          [rewardPerPerson, guess.user_id]
-        );
-      }
-    } else {
-      for (const guess of guesses) {
-        await client.query(
-          'UPDATE guesses SET is_correct = false, points_change = 0 WHERE id = $1',
-          [guess.id]
-        );
-      }
-    }
+      db.prepare('UPDATE game_rounds SET status = ?, settled_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run('settled', id);
+    });
 
-    await client.query(
-      'UPDATE game_rounds SET status = $1, settled_at = CURRENT_TIMESTAMP WHERE id = $2',
-      ['settled', id]
-    );
-
-    await client.query('COMMIT');
+    settle();
 
     const updatedGuesses = await pool.query(
       `SELECT g.*, u.username
        FROM guesses g
        JOIN users u ON g.user_id = u.id
-       WHERE g.round_id = $1`,
+       WHERE g.round_id = ?`,
       [id]
     );
 
@@ -305,11 +298,8 @@ const settleRound = async (req, res) => {
       },
     });
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('Settle round error:', error);
     res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    client.release();
   }
 };
 

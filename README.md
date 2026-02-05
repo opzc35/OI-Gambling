@@ -4,7 +4,7 @@
 
 ## 技术栈
 
-- **后端**: Node.js + Express.js + PostgreSQL + WebSocket
+- **后端**: Node.js + Express.js + SQLite + WebSocket
 - **前端**: React.js + TypeScript
 - **外部API**: Codeforces API
 
@@ -21,16 +21,18 @@
 
 ### 1. 数据库设置
 
-首先，确保你已经安装了 PostgreSQL。然后创建数据库：
+项目使用 SQLite 数据库，无需额外安装。初始化数据库：
 
 ```bash
-createdb oi_gambling
+./init-db.sh
 ```
 
-初始化数据库表：
+或者手动初始化：
 
 ```bash
-psql -d oi_gambling -f backend/src/config/database.sql
+cd backend
+npm install
+node -e "const db = require('better-sqlite3')('./database.sqlite'); const fs = require('fs'); db.exec(fs.readFileSync('src/config/database.sql', 'utf8'));"
 ```
 
 ### 2. 后端设置
@@ -38,7 +40,7 @@ psql -d oi_gambling -f backend/src/config/database.sql
 ```bash
 cd backend
 npm install
-# 编辑 .env 文件，配置数据库连接和 JWT 密钥
+# 编辑 .env 文件，配置 JWT 密钥
 npm run dev
 ```
 
@@ -60,7 +62,7 @@ npm start
 
 ```
 PORT=3000
-DATABASE_URL=postgresql://username:password@localhost:5432/oi_gambling
+DATABASE_PATH=./database.sqlite
 JWT_SECRET=your-secret-key-change-this-in-production
 NODE_ENV=development
 ```

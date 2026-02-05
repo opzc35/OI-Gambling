@@ -1,4 +1,4 @@
-const pool = require('../config/database');
+const pool = require('../config/dbHelper');
 
 const createRoom = async (req, res) => {
   try {
@@ -8,17 +8,19 @@ const createRoom = async (req, res) => {
       return res.status(400).json({ error: 'Room name is required' });
     }
 
-    const result = await pool.query(
-      'INSERT INTO rooms (name, owner_id) VALUES ($1, $2) RETURNING *',
+    const result = await pool.run(
+      'INSERT INTO rooms (name, owner_id) VALUES (?, ?)',
       [name.trim(), req.userId]
     );
 
-    await pool.query(
-      'INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)',
-      [result.rows[0].id, req.userId]
+    const room = await pool.get('SELECT * FROM rooms WHERE id = ?', [result.lastID]);
+
+    await pool.run(
+      'INSERT INTO room_members (room_id, user_id) VALUES (?, ?)',
+      [room.id, req.userId]
     );
 
-    res.status(201).json({ room: result.rows[0] });
+    res.status(201).json({ room });
   } catch (error) {
     console.error('Create room error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -33,7 +35,7 @@ const getRooms = async (req, res) => {
        FROM rooms r
        JOIN users u ON r.owner_id = u.id
        LEFT JOIN room_members rm ON r.id = rm.room_id
-       WHERE r.is_active = true
+       WHERE r.is_active = 1
        GROUP BY r.id, u.username
        ORDER BY r.created_at DESC`
     );
@@ -53,7 +55,7 @@ const getRoom = async (req, res) => {
       `SELECT r.*, u.username as owner_username
        FROM rooms r
        JOIN users u ON r.owner_id = u.id
-       WHERE r.id = $1`,
+       WHERE r.id = ?`,
       [id]
     );
 
@@ -65,7 +67,7 @@ const getRoom = async (req, res) => {
       `SELECT u.id, u.username, u.points, rm.joined_at
        FROM room_members rm
        JOIN users u ON rm.user_id = u.id
-       WHERE rm.room_id = $1
+       WHERE rm.room_id = ?
        ORDER BY rm.joined_at`,
       [id]
     );
@@ -85,7 +87,7 @@ const joinRoom = async (req, res) => {
     const { id } = req.params;
 
     const roomResult = await pool.query(
-      'SELECT * FROM rooms WHERE id = $1 AND is_active = true',
+      'SELECT * FROM rooms WHERE id = ? AND is_active = 1',
       [id]
     );
 
@@ -94,7 +96,7 @@ const joinRoom = async (req, res) => {
     }
 
     const existingMember = await pool.query(
-      'SELECT * FROM room_members WHERE room_id = $1 AND user_id = $2',
+      'SELECT * FROM room_members WHERE room_id = ? AND user_id = ?',
       [id, req.userId]
     );
 
@@ -102,8 +104,8 @@ const joinRoom = async (req, res) => {
       return res.status(400).json({ error: 'Already in this room' });
     }
 
-    await pool.query(
-      'INSERT INTO room_members (room_id, user_id) VALUES ($1, $2)',
+    await pool.run(
+      'INSERT INTO room_members (room_id, user_id) VALUES (?, ?)',
       [id, req.userId]
     );
 
@@ -119,7 +121,7 @@ const leaveRoom = async (req, res) => {
     const { id } = req.params;
 
     const roomResult = await pool.query(
-      'SELECT owner_id FROM rooms WHERE id = $1',
+      'SELECT owner_id FROM rooms WHERE id = ?',
       [id]
     );
 
@@ -131,8 +133,8 @@ const leaveRoom = async (req, res) => {
       return res.status(400).json({ error: 'Room owner cannot leave. Close the room instead.' });
     }
 
-    const result = await pool.query(
-      'DELETE FROM room_members WHERE room_id = $1 AND user_id = $2',
+    const result = await pool.run(
+      'DELETE FROM room_members WHERE room_id = ? AND user_id = ?',
       [id, req.userId]
     );
 
@@ -152,7 +154,7 @@ const closeRoom = async (req, res) => {
     const { id } = req.params;
 
     const roomResult = await pool.query(
-      'SELECT owner_id FROM rooms WHERE id = $1',
+      'SELECT owner_id FROM rooms WHERE id = ?',
       [id]
     );
 
@@ -164,8 +166,8 @@ const closeRoom = async (req, res) => {
       return res.status(403).json({ error: 'Only room owner can close the room' });
     }
 
-    await pool.query(
-      'UPDATE rooms SET is_active = false WHERE id = $1',
+    await pool.run(
+      'UPDATE rooms SET is_active = 0 WHERE id = ?',
       [id]
     );
 

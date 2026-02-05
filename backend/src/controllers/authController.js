@@ -1,6 +1,6 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const pool = require('../config/database');
+const pool = require('../config/dbHelper');
 
 const register = async (req, res) => {
   try {
@@ -19,7 +19,7 @@ const register = async (req, res) => {
     }
 
     const existingUser = await pool.query(
-      'SELECT id FROM users WHERE username = $1',
+      'SELECT id FROM users WHERE username = ?',
       [username]
     );
 
@@ -29,12 +29,15 @@ const register = async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const result = await pool.query(
-      'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username, points, created_at',
+    const result = await pool.run(
+      'INSERT INTO users (username, password_hash) VALUES (?, ?)',
       [username, passwordHash]
     );
 
-    const user = result.rows[0];
+    const user = await pool.get(
+      'SELECT id, username, points, created_at FROM users WHERE id = ?',
+      [result.lastID]
+    );
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
       expiresIn: '7d',
@@ -64,7 +67,7 @@ const login = async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT id, username, password_hash, points FROM users WHERE username = $1',
+      'SELECT id, username, password_hash, points FROM users WHERE username = ?',
       [username]
     );
 
@@ -100,7 +103,7 @@ const login = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, username, points, created_at FROM users WHERE id = $1',
+      'SELECT id, username, points, created_at FROM users WHERE id = ?',
       [req.userId]
     );
 
